@@ -17,6 +17,8 @@ NEWS_API_KEY = "ea6acd4f9dca4de99fab812dc069a67b"
 # ================= FUNCIONES =================
 def enviar_mensaje_telegram(texto):
     try:
+        if len(texto) > 3900:
+            texto = texto[:3900] + "\n...📌 Mensaje truncado por límite de Telegram"
         r = requests.post(URL_TELEGRAM, data={
             "chat_id": CHAT_ID,
             "text": texto,
@@ -29,8 +31,9 @@ def enviar_mensaje_telegram(texto):
     except Exception as e:
         print(f"[{datetime.now()}] Excepción al enviar mensaje: {e}")
 
+# ================= DATOS DEL MERCADO =================
 def obtener_datos_macro():
-    tickers = ["EURUSD", "GBPUSD", "XAUUSD", "DXY", "^VIX"]
+    tickers = ["EURUSD","GBPUSD","XAUUSD","DXY","^VIX"]
     datos = {}
     for t in tickers:
         url = f"https://finnhub.io/api/v1/quote?symbol={t}&token={FINNHUB_API_KEY}"
@@ -38,11 +41,12 @@ def obtener_datos_macro():
             r = requests.get(url)
             datos[t] = r.json()
             if "c" not in datos[t] or "pc" not in datos[t]:
-                datos[t] = {"c": None, "pc": None}
+                datos[t] = {"c": None, "pc": None, "h": None, "l": None, "o": None}
         except:
-            datos[t] = {"c": None, "pc": None}
+            datos[t] = {"c": None, "pc": None, "h": None, "l": None, "o": None}
     return datos
 
+# ================= DETECCIÓN =================
 def detectar_divergencia(datos):
     eur = datos.get("EURUSD", {}).get("c")
     dxy = datos.get("DXY", {}).get("c")
@@ -50,35 +54,35 @@ def detectar_divergencia(datos):
     dxy_pc = datos.get("DXY", {}).get("pc")
     if all(isinstance(x,(int,float)) for x in [eur,dxy,eur_pc,dxy_pc]):
         if (eur > eur_pc) and (dxy < dxy_pc):
-            return "🔺 Divergencia alcista EURUSD vs DXY"
+            return "🔺 *Divergencia alcista EURUSD vs DXY*"
         elif (eur < eur_pc) and (dxy > dxy_pc):
-            return "🔻 Divergencia bajista EURUSD vs DXY"
+            return "🔻 *Divergencia bajista EURUSD vs DXY*"
     return None
 
 def detectar_manipulacion(datos):
-    try:
-        eur_data = datos.get("EURUSD", {})
-        eur = eur_data.get("c")
-        eur_prev = eur_data.get("pc")
-        if not eur or not eur_prev or eur_prev == 0:
-            return None
-        cambio = ((eur - eur_prev)/eur_prev)*100
-        if abs(cambio) > 0.5:
-            return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
+    eur_data = datos.get("EURUSD", {})
+    eur = eur_data.get("c")
+    eur_prev = eur_data.get("pc")
+    if eur is None or eur_prev in (None, 0):
         return None
-    except:
-        return None
+    cambio = ((eur - eur_prev)/eur_prev)*100
+    if abs(cambio) > 0.5:
+        return f"⚠️ *Posible manipulación de Londres ({cambio:.2f}%) *"
+    return None
 
 def calcular_tendencia(valor, previo, umbral=0.1):
-    if valor is None or previo in (None,0):
-        return "❌ Datos insuficientes"
-    cambio = ((valor - previo)/previo)*100
-    if cambio > umbral:
-        return "📈 *Alcista*"
-    elif cambio < -umbral:
-        return "📉 *Bajista*"
-    else:
-        return "➡️ *Neutral*"
+    try:
+        if valor is None or previo in (None,0):
+            return "⚪ Datos insuficientes"
+        cambio = ((valor - previo)/previo)*100
+        if cambio > umbral:
+            return "📈 🟢 Alcista"
+        elif cambio < -umbral:
+            return "📉 🔴 Bajista"
+        else:
+            return "➡️ 🟡 Neutral"
+    except:
+        return "⚪ Error"
 
 # ================= NOTICIAS =================
 RSS_FEEDS = [
@@ -93,7 +97,7 @@ def obtener_noticias_rss():
     for feed in RSS_FEEDS:
         try:
             d = feedparser.parse(feed)
-            for entry in d.entries[:3]:
+            for entry in d.entries[:5]:
                 titulo = entry.get("title","")
                 descripcion = entry.get("summary","")
                 enlace = entry.get("link","")
@@ -103,7 +107,7 @@ def obtener_noticias_rss():
                 except:
                     titulo_es = titulo
                     descripcion_es = descripcion
-                noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}")
+                noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}\n")
         except Exception as e:
             print(f"[{datetime.now()}] Error leyendo RSS {feed}: {e}")
     return noticias
@@ -111,7 +115,7 @@ def obtener_noticias_rss():
 def obtener_noticias_relevantes():
     noticias = []
     noticias.extend(obtener_noticias_rss())
-    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=3&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url).json()
         for n in r.get("articles", []):
@@ -124,16 +128,27 @@ def obtener_noticias_relevantes():
             except:
                 titulo_es = titulo
                 descripcion_es = descripcion
-            noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}")
+            noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}\n")
     except:
         pass
     return noticias
 
-# ================= MENSAJES =================
-def construir_mensaje_alertas(seccion):
+# ================= FORMATEO =================
+def formatear_activo(nombre, datos, tendencia):
+    if not datos or datos.get("c") is None:
+        return f"{nombre} – ⚪ Datos insuficientes – Tendencia: {tendencia}"
+    precio = datos.get("c", 0)
+    maximo = datos.get("h", 0)
+    minimo = datos.get("l", 0)
+    apertura = datos.get("o", 0)
+    return f"{nombre} – 💰 Precio: {precio} | 📈 Máx: {maximo} | 📉 Mín: {minimo} | 🏁 Apertura: {apertura} | Tendencia: {tendencia}"
+
+# ================= CONSTRUIR MENSAJE =================
+def construir_mensaje_alertas(seccion="Global"):
     datos = obtener_datos_macro()
     alertas = []
 
+    # Tendencias
     tendencias = {}
     for par in ["EURUSD","GBPUSD","XAUUSD","DXY"]:
         valor = datos.get(par, {}).get("c")
@@ -151,7 +166,7 @@ def construir_mensaje_alertas(seccion):
         vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
         if vix > 25: alertas.append("⚡ VIX alto – cuidado con volatilidad")
     else:
-        vix_texto = "❌ Error al obtener VIX"
+        vix_texto = "⚪ Error al obtener VIX"
 
     noticias = obtener_noticias_relevantes()
     if noticias:
@@ -160,21 +175,18 @@ def construir_mensaje_alertas(seccion):
     if not alertas: return None
 
     mensaje = f"""
-🌐 MAESTRO ANALISTA IA – ALERTAS MACRO 🌐
+🌐 *MAESTRO ANALISTA IA – ALERTAS MACRO* 🌐
 📍 Sección: {seccion}
 
-EURUSD: {datos.get('EURUSD')} – Tendencia: {tendencias['EURUSD']}
-GBPUSD: {datos.get('GBPUSD')} – Tendencia: {tendencias['GBPUSD']}
-XAUUSD: {datos.get('XAUUSD')} – Tendencia: {tendencias['XAUUSD']}
-DXY: {datos.get('DXY')} – Tendencia: {tendencias['DXY']}
-VIX: {vix} ({vix_texto})
+{formatear_activo('EURUSD', datos.get('EURUSD'), tendencias['EURUSD'])}
+{formatear_activo('GBPUSD', datos.get('GBPUSD'), tendencias['GBPUSD'])}
+{formatear_activo('XAUUSD', datos.get('XAUUSD'), tendencias['XAUUSD'])}
+{formatear_activo('DXY', datos.get('DXY'), tendencias['DXY'])}
+VIX – {vix} ({vix_texto})
 
 *Alertas:*
 """ + "\n".join(alertas)
 
-    if len(mensaje) > 3500:
-        mensaje = mensaje[:3500] + "\n\n[⚠️ Mensaje truncado por longitud]"
-    
     return mensaje
 
 def enviar_alerta_seccion(seccion):
@@ -182,62 +194,29 @@ def enviar_alerta_seccion(seccion):
     if mensaje:
         enviar_mensaje_telegram(mensaje)
     else:
-        print(f"[{datetime.now()}] Sin alertas relevantes en {seccion}")
-
-def enviar_resumen_diario():
-    datos = obtener_datos_macro()
-    tendencias = {}
-    for par in ["EURUSD","GBPUSD","XAUUSD","DXY"]:
-        valor = datos.get(par, {}).get("c")
-        previo = datos.get(par, {}).get("pc")
-        tendencias[par] = calcular_tendencia(valor, previo)
-
-    vix = datos.get("^VIX", {}).get("c")
-    if isinstance(vix,(int,float)):
-        vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
-    else:
-        vix_texto = "❌ Error al obtener VIX"
-
-    mensaje = f"""
-🌞 *RESUMEN DIARIO MACRO – DASHBOARD IA* 🌞
-
-EURUSD: {datos.get('EURUSD')} – Tendencia: {tendencias['EURUSD']}
-GBPUSD: {datos.get('GBPUSD')} – Tendencia: {tendencias['GBPUSD']}
-XAUUSD: {datos.get('XAUUSD')} – Tendencia: {tendencias['XAUUSD']}
-DXY: {datos.get('DXY')} – Tendencia: {tendencias['DXY']}
-VIX: {vix} ({vix_texto})
-
-📌 El resumen diario te permite ver rápidamente el estado del mercado antes de las sesiones.
-"""
-    enviar_mensaje_telegram(mensaje)
+        print(f"[{datetime.now()}] Sin alertas relevantes para {seccion}")
 
 # ================= HORARIOS =================
 SECCIONES = {
-    "Asia": {"pre": "01:30", "inicio": 2, "fin": 9},
-    "Londres": {"pre": "10:30", "inicio": 11, "fin": 16},
-    "Nueva York": {"pre": "14:30", "inicio": 14, "fin": 21}
+    "Asia": {"pre_market": "01:30", "sesion": range(2,10)},
+    "Londres": {"pre_market": "08:30", "sesion": range(9,17)},
+    "Nueva York": {"pre_market": "13:30", "sesion": range(14,22)}
 }
 
-# Resumen diario a las 07:00
-schedule.every().day.at("07:00").do(enviar_resumen_diario)
+agenda = schedule
 
-# Alertas por sección
-for seccion, times in SECCIONES.items():
-    schedule.every().day.at(times["pre"]).do(enviar_alerta_seccion, seccion)
-    for h in range(times["inicio"], times["fin"]):
-        schedule.every().day.at(f"{h:02d}:00").do(enviar_alerta_seccion, seccion)
-        schedule.every().day.at(f"{h:02d}:20").do(enviar_alerta_seccion, seccion)
-        schedule.every().day.at(f"{h:02d}:40").do(enviar_alerta_seccion, seccion)
+for seccion, horas in SECCIONES.items():
+    agenda.every().day.at(horas["pre_market"]).do(enviar_alerta_seccion, seccion)
+    for h in horas["sesion"]:
+        agenda.every().hour.at(":00").do(enviar_alerta_seccion, seccion)
+        agenda.every().hour.at(":20").do(enviar_alerta_seccion, seccion)
+        agenda.every().hour.at(":40").do(enviar_alerta_seccion, seccion)
 
 # ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram funciona.")
-
-# Envío inicial del resumen y alertas
-enviar_resumen_diario()
-for seccion in SECCIONES.keys():
-    enviar_alerta_seccion(seccion)
+enviar_alerta_seccion("Global")
 
 while True:
-    schedule.run_pending()
+    agenda.run_pending()
     time.sleep(1)
