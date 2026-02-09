@@ -4,7 +4,7 @@ import schedule
 import time
 from datetime import datetime
 from deep_translator import GoogleTranslator
-import feedparser
+import feedparser  # Para leer RSS
 
 # ================= VARIABLES =================
 # Telegram
@@ -26,16 +26,16 @@ print("===========================================")
 
 # ================= FUNCIONES =================
 def enviar_mensaje_telegram(texto):
+    MAX_CHARS = 4000
     try:
-        r = requests.post(URL_TELEGRAM, data={
-            "chat_id": CHAT_ID,
-            "text": texto,
-            "parse_mode": "Markdown"
-        })
-        if r.status_code == 200:
-            print(f"[{datetime.now()}] Mensaje enviado correctamente")
-        else:
-            print(f"[{datetime.now()}] Error Telegram: {r.text}")
+        for i in range(0, len(texto), MAX_CHARS):
+            r = requests.post(URL_TELEGRAM, data={
+                "chat_id": CHAT_ID,
+                "text": texto[i:i+MAX_CHARS],
+                "parse_mode": "Markdown"
+            })
+            if r.status_code != 200:
+                print(f"[{datetime.now()}] Error Telegram: {r.text}")
     except Exception as e:
         print(f"[{datetime.now()}] Excepción al enviar mensaje: {e}")
 
@@ -60,7 +60,7 @@ def detectar_divergencia(datos):
     dxy = datos.get("DXY", {}).get("c")
     eur_pc = datos.get("EURUSD", {}).get("pc")
     dxy_pc = datos.get("DXY", {}).get("pc")
-    if all(isinstance(x,(int,float)) for x in [eur,dxy,eur_pc,dxy_pc]):
+    if all(isinstance(x,(int,float)) and x != 0 for x in [eur,dxy,eur_pc,dxy_pc]):
         if (eur > eur_pc) and (dxy < dxy_pc):
             return "🔺 Divergencia alcista EURUSD vs DXY"
         elif (eur < eur_pc) and (dxy > dxy_pc):
@@ -70,11 +70,9 @@ def detectar_divergencia(datos):
 def detectar_manipulacion(datos):
     try:
         eur_data = datos.get("EURUSD", {})
-        if not isinstance(eur_data, dict):
-            return None
         eur = eur_data.get("c")
         eur_prev = eur_data.get("pc")
-        if not isinstance(eur, (int,float)) or not isinstance(eur_prev, (int,float)):
+        if not all(isinstance(x,(int,float)) for x in [eur, eur_prev]):
             return None
         if eur_prev == 0:
             return None
@@ -86,11 +84,8 @@ def detectar_manipulacion(datos):
         return None
 
 def calcular_tendencia(valor, previo, umbral=0.1):
-    """
-    Determina si el par es Alcista, Neutral o Bajista.
-    Protege contra división por cero o valores nulos.
-    """
-    if valor is None or previo is None or previo == 0:
+    """Determina si el par es Alcista, Neutral o Bajista, previniendo división por cero"""
+    if valor is None or previo in [None,0]:
         return "❌ Datos insuficientes"
     cambio = ((valor - previo)/previo)*100
     if cambio > umbral:
@@ -98,7 +93,7 @@ def calcular_tendencia(valor, previo, umbral=0.1):
     elif cambio < -umbral:
         return "📉 Bajista"
     else:
-        return "⚖️ Neutral"
+        return "➡️ Neutral"
 
 # ================= NOTICIAS =================
 RSS_FEEDS = [
@@ -108,12 +103,12 @@ RSS_FEEDS = [
     "https://www.cnbc.com/id/100727362/device/rss/rss.html"
 ]
 
-def obtener_noticias_rss():
+def obtener_noticias_rss(max_por_feed=3):
     noticias = []
     for feed in RSS_FEEDS:
         try:
             d = feedparser.parse(feed)
-            for entry in d.entries[:5]:
+            for entry in d.entries[:max_por_feed]:
                 titulo = entry.get("title","")
                 descripcion = entry.get("summary","")
                 enlace = entry.get("link","")
@@ -128,13 +123,12 @@ def obtener_noticias_rss():
             print(f"[{datetime.now()}] Error leyendo RSS {feed}: {e}")
     return noticias
 
-def obtener_noticias_relevantes():
-    noticias = []
-    noticias.extend(obtener_noticias_rss())
-    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
+def obtener_noticias_relevantes(max_newsapi=3):
+    noticias = obtener_noticias_rss()
+    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize={max_newsapi}&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url).json()
-        for n in r.get("articles", []):
+        for n in r.get("articles", [])[:max_newsapi]:
             titulo = n.get("title","")
             descripcion = n.get("description","")
             enlace = n.get("url","")
@@ -176,12 +170,13 @@ def construir_mensaje_alertas(seccion="General"):
 
     noticias = obtener_noticias_relevantes()
     if noticias:
-        alertas.append(f"*Últimas noticias relevantes:*\n" + "\n".join(noticias))
+        alertas.append(f"*Últimas noticias relevantes ({seccion}):*\n" + "\n".join(noticias))
 
     if not alertas: return None
 
     mensaje = f"""
-🌐 *MAESTRO ANALISTA IA – ALERTAS MACRO ({seccion})*
+🌐 *MAESTRO ANALISTA IA – ALERTAS MACRO* 🌐
+📍 Sección: {seccion}
 
 EURUSD: {datos.get('EURUSD')} – Tendencia: {tendencias['EURUSD']}
 GBPUSD: {datos.get('GBPUSD')} – Tendencia: {tendencias['GBPUSD']}
@@ -194,34 +189,37 @@ VIX: {vix} ({vix_texto})
 
     return mensaje
 
-def enviar_alerta_seccion(seccion="General"):
+def enviar_alerta_seccion(seccion):
     mensaje = construir_mensaje_alertas(seccion)
     if mensaje:
         enviar_mensaje_telegram(mensaje)
     else:
-        print(f"[{datetime.now()}] Sin alertas relevantes ({seccion})")
+        print(f"[{datetime.now()}] Sin alertas relevantes en {seccion}")
 
 # ================= HORARIOS =================
 SECCIONES = {
-    "Asia": {"pre": "02:30", "sesion": range(3,10)},        # hora Chile
+    "Asia": {"pre": "01:30", "sesion": range(2,10)},     # Horas aproximadas en UTC
     "Londres": {"pre": "10:30", "sesion": range(11,16)},
     "Nueva York": {"pre": "14:30", "sesion": range(15,21)}
 }
 
-for seccion, info in SECCIONES.items():
+for sec, val in SECCIONES.items():
     # Pre-market
-    schedule.every().day.at(info["pre"]).do(enviar_alerta_seccion, seccion)
-    # Durante sesión cada 20 minutos
-    for h in info["sesion"]:
+    schedule.every().day.at(val["pre"]).do(enviar_alerta_seccion, sec)
+    # Durante la sesión cada 20 minutos
+    for h in val["sesion"]:
         for m in [0,20,40]:
-            schedule.every().day.at(f"{h:02d}:{m:02d}").do(enviar_alerta_seccion, seccion)
+            schedule.every().day.at(f"{h:02d}:{m:02d}").do(enviar_alerta_seccion, sec)
 
 # ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 
+# Mensaje de prueba al iniciar
 enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram funciona.")
 
-enviar_alerta_seccion("General")
+# Envío inicial de alertas
+for sec in SECCIONES:
+    enviar_alerta_seccion(sec)
 
 while True:
     schedule.run_pending()
