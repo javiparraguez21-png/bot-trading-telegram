@@ -137,6 +137,26 @@ def enviar_si_hay_alerta():
     else:
         print(f"[{datetime.now()}] Sin alertas relevantes, no se envió mensaje")
 
+# ================= ALERTA SIMULADA =================
+def enviar_mensaje_prueba():
+    mensaje_prueba = """
+📊 *MENSAJE DE PRUEBA – BOT ULTRA PRO*
+
+EURUSD: 1.1234
+GBPUSD: 1.2345
+XAUUSD: 1900
+DXY: 102.5
+VIX: 18 🟢 Baja/Moderada volatilidad
+
+*Alertas simuladas:*
+🔺 Divergencia alcista EURUSD vs DXY
+⚠️ Posible manipulación de Londres
+📰 Últimas noticias relevantes:
+• 📰 *Prueba de noticia 1* Descripción breve de prueba 🔗 https://example.com
+• 📰 *Prueba de noticia 2* Descripción breve de prueba 🔗 https://example.com
+"""
+    enviar_mensaje_telegram(mensaje_prueba)
+
 # ================= HORARIOS =================
 # Pre-market Londres
 schedule.every().day.at("10:30").do(enviar_si_hay_alerta)
@@ -153,7 +173,12 @@ for hour in range(14,21):
 
 # ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
-enviar_si_hay_alerta()  # envío inicial al iniciar
+
+# ⚡ ENVÍO INMEDIATO DE PRUEBA
+enviar_mensaje_prueba()
+
+# Envío inicial de alertas reales
+enviar_si_hay_alerta()
 
 while True:
     schedule.run_pending()
