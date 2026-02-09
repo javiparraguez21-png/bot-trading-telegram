@@ -38,16 +38,16 @@ def obtener_datos_macro():
             info = r.json()
             datos[t] = info
         except:
-            datos[t] = {"c":"Error","pc":"Error"}
+            datos[t] = {"c": None, "pc": None}
     return datos
 
-# ----------------- DIVGERENCIAS -----------------
+# ----------------- DIVERGENCIAS -----------------
 def detectar_divergencia(datos):
     eur = datos.get("EURUSD", {}).get("c")
     dxy = datos.get("DXY", {}).get("c")
     eur_pc = datos.get("EURUSD", {}).get("pc")
     dxy_pc = datos.get("DXY", {}).get("pc")
-    if isinstance(eur,(int,float)) and isinstance(dxy,(int,float)) and eur_pc and dxy_pc:
+    if all(isinstance(x,(int,float)) for x in [eur,dxy,eur_pc,dxy_pc]):
         if (eur > eur_pc) and (dxy < dxy_pc):
             return "🔺 Divergencia alcista EURUSD vs DXY"
         elif (eur < eur_pc) and (dxy > dxy_pc):
@@ -58,7 +58,7 @@ def detectar_divergencia(datos):
 def detectar_manipulacion(datos):
     eur = datos.get("EURUSD", {}).get("c")
     eur_prev = datos.get("EURUSD", {}).get("pc")
-    if eur_prev and eur and isinstance(eur,(int,float)) and isinstance(eur_prev,(int,float)):
+    if all(isinstance(x,(int,float)) for x in [eur, eur_prev]):
         cambio = ((eur - eur_prev)/eur_prev)*100
         if abs(cambio) > 0.5:
             return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
@@ -66,22 +66,20 @@ def detectar_manipulacion(datos):
 
 # ----------------- NOTICIAS -----------------
 def obtener_noticias_relevantes():
-    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
     noticias = []
+    url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url).json()
         for n in r.get("articles", []):
             titulo = n.get("title","")
             descripcion = n.get("description","")
             enlace = n.get("url","")
-            # Traduce al español
             try:
                 titulo_es = GoogleTranslator(source='en', target='es').translate(titulo)
                 descripcion_es = GoogleTranslator(source='en', target='es').translate(descripcion)
             except:
                 titulo_es = titulo
                 descripcion_es = descripcion
-            # Solo noticias que contienen palabras clave macro/relevantes
             keywords = ["FED","BCE","Trump","geopolítica","inflación","banco central","tensiones"]
             if any(k.lower() in (titulo_es+descripcion_es).lower() for k in keywords):
                 noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}\n")
@@ -100,25 +98,23 @@ def construir_mensaje_alertas():
     manipulacion = detectar_manipulacion(datos)
     if manipulacion: alertas.append(manipulacion)
     
-    # Interpretación VIX
-vix = datos.get("^VIX", {}).get("c")
-vix_texto = ""
-if isinstance(vix, (int, float)):
-    vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
-    if vix > 25:
-        alertas.append("⚡ VIX alto – cuidado con volatilidad")
-else:
-    vix_texto = "❌ Error al obtener VIX"
-
+    vix = datos.get("^VIX", {}).get("c")
+    vix_texto = ""
+    if isinstance(vix, (int,float)):
+        vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
+        if vix > 25:
+            alertas.append("⚡ VIX alto – cuidado con volatilidad")
+    else:
+        vix_texto = "❌ Error al obtener VIX"
     
     noticias = obtener_noticias_relevantes()
     if noticias:
         alertas.append(f"*Últimas noticias relevantes:*\n" + "\n".join(noticias))
     
-   if not alertas:
-    return None  # no hay alertas, no envía mensaje
-
-mensaje = f"""
+    if not alertas:
+        return None  # no hay alertas, no envía mensaje
+    
+    mensaje = f"""
 📊 *MAESTRO ANALISTA IA – ALERTAS MACRO*
 
 EURUSD: {datos.get('EURUSD')}
@@ -129,23 +125,8 @@ VIX: {vix} ({vix_texto})
 
 *Alertas:*
 """ + "\n".join(alertas)
-
-return mensaje
-
-
-# ================= HORARIOS =================
-# Pre-market Londres
-schedule.every().day.at("10:30").do(lambda: enviar_si_hay_alerta())
-
-# Durante Londres cada 30 min
-for hour in range(11,20):
-    schedule.every().day.at(f"{hour}:00").do(lambda: enviar_si_hay_alerta())
-    schedule.every().day.at(f"{hour}:30").do(lambda: enviar_si_hay_alerta())
-
-# Durante New York cada 30 min
-for hour in range(14,21):
-    schedule.every().day.at(f"{hour}:00").do(lambda: enviar_si_hay_alerta())
-    schedule.every().day.at(f"{hour}:30").do(lambda: enviar_si_hay_alerta())
+    
+    return mensaje
 
 # ================= FUNCION ENVÍO CON ALERTAS =================
 def enviar_si_hay_alerta():
@@ -156,6 +137,20 @@ def enviar_si_hay_alerta():
     else:
         print(f"[{datetime.now()}] Sin alertas relevantes, no se envió mensaje")
 
+# ================= HORARIOS =================
+# Pre-market Londres
+schedule.every().day.at("10:30").do(enviar_si_hay_alerta)
+
+# Durante Londres cada 30 min
+for hour in range(11,20):
+    schedule.every().day.at(f"{hour}:00").do(enviar_si_hay_alerta)
+    schedule.every().day.at(f"{hour}:30").do(enviar_si_hay_alerta)
+
+# Durante New York cada 30 min
+for hour in range(14,21):
+    schedule.every().day.at(f"{hour}:00").do(enviar_si_hay_alerta)
+    schedule.every().day.at(f"{hour}:30").do(enviar_si_hay_alerta)
+
 # ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 enviar_si_hay_alerta()  # envío inicial al iniciar
@@ -163,5 +158,3 @@ enviar_si_hay_alerta()  # envío inicial al iniciar
 while True:
     schedule.run_pending()
     time.sleep(1)
-
-
