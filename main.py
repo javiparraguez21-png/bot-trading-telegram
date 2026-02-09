@@ -101,12 +101,15 @@ def construir_mensaje_alertas():
     if manipulacion: alertas.append(manipulacion)
     
     # Interpretación VIX
-    vix = datos.get("^VIX", {}).get("c")
-    vix_texto = ""
-    if vix != "Error":
-        vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
-        if vix > 25:
-            alertas.append("⚡ VIX alto – cuidado con volatilidad")
+vix = datos.get("^VIX", {}).get("c")
+vix_texto = ""
+if isinstance(vix, (int, float)):
+    vix_texto = "🔴 Alta volatilidad" if vix > 25 else "🟢 Baja/Moderada volatilidad"
+    if vix > 25:
+        alertas.append("⚡ VIX alto – cuidado con volatilidad")
+else:
+    vix_texto = "❌ Error al obtener VIX"
+
     
     noticias = obtener_noticias_relevantes()
     if noticias:
@@ -159,3 +162,4 @@ enviar_si_hay_alerta()  # envío inicial al iniciar
 while True:
     schedule.run_pending()
     time.sleep(1)
+
