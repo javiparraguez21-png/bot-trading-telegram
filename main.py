@@ -16,7 +16,7 @@ URL_TELEGRAM = f"https://api.telegram.org/bot 8142044386AAFInOnDRJgUiWkRuDPeGnWh
 
 # ================= DEBUG VARIABLES =================
 print("===== VERIFICANDO VARIABLES DE ENTORNO =====")
-print(f"TELEGRAM_TOKEN: "8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
+print(f"TELEGRAM_TOKEN:"8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 print(f"CHAT_ID:"5933788259"
 print(f"FINNHUB_API_KEY:"d632dchr01qnpqnvhurgd632dchr01qnpqnvhus0"
 print(f"NEWS_API_KEY:"ea6acd4f9dca4de99fab812dc069a67b"
@@ -167,3 +167,4 @@ enviar_si_hay_alerta()
 while True:
     schedule.run_pending()
     time.sleep(1)
+
