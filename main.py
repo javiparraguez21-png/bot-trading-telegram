@@ -1,3 +1,6 @@
+import os
+
+
 import requests
 import schedule
 import time
@@ -9,13 +12,16 @@ from deep_translator import GoogleTranslator
 # =============================
 
 import os
+TELEGRAM_TOKEN = os.getenv(TELEGRAM_TOKEN = os.getenv(8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc)
+CHAT_ID = os.getenv(5933788259)
+
 
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 FINNHUB_API = os.getenv("FINNHUB_API")
 NEWS_API = os.getenv("NEWS_API")
         
-URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+URL_TELEGRAM = f"https://api.telegram.org/bot{8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc}/sendMessage"
 
 translator = GoogleTranslator(source="en", target="es")
 
@@ -227,3 +233,4 @@ print("BOT MACRO INSTITUCIONAL ACTIVO")
 while True:
     schedule.run_pending()
     time.sleep(10)
+
