@@ -2,4 +2,5 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "python bot_trading_pro.py"
+startCommand = python main.py
+
