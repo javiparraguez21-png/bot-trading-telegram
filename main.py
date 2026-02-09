@@ -7,14 +7,13 @@ from deep_translator import GoogleTranslator
 
 # ================= VARIABLES =================
 # Telegram
-TELEGRAM_TOKEN = "8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
+TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 CHAT_ID = "5933788259"
+URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # APIs
 FINNHUB_API_KEY = "d632dchr01qnpqnvhurgd632dchr01qnpqnvhus0"
 NEWS_API_KEY = "ea6acd4f9dca4de99fab812dc069a67b"
-
-URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # ================= DEBUG =================
 print("===== VERIFICANDO VARIABLES DE ENTORNO =====")
@@ -48,6 +47,9 @@ def obtener_datos_macro():
         try:
             r = requests.get(url)
             datos[t] = r.json()
+            # Asegurarnos que siempre tenga 'c' y 'pc'
+            if "c" not in datos[t] or "pc" not in datos[t]:
+                datos[t] = {"c": None, "pc": None}
         except:
             datos[t] = {"c": None, "pc": None}
     return datos
@@ -69,22 +71,31 @@ def detectar_manipulacion(datos):
     """
     Detecta cambios porcentuales y evita errores si datos faltan o previos son cero.
     """
-    eur = datos.get("EURUSD", {}).get("c")
-    eur_prev = datos.get("EURUSD", {}).get("pc")
-    
-    if eur is None or eur_prev is None:
-        print(f"[{datetime.now()}] Datos incompletos para detectar manipulación")
+    try:
+        eur_data = datos.get("EURUSD", {})
+        if not isinstance(eur_data, dict):
+            print(f"[{datetime.now()}] datos['EURUSD'] no es un diccionario")
+            return None
+        
+        eur = eur_data.get("c")
+        eur_prev = eur_data.get("pc")
+        
+        if not isinstance(eur, (int,float)) or not isinstance(eur_prev, (int,float)):
+            print(f"[{datetime.now()}] eur o eur_prev no son números")
+            return None
+        
+        if eur_prev == 0:
+            print(f"[{datetime.now()}] eur_prev es 0, evitando división por cero")
+            return None
+        
+        cambio = ((eur - eur_prev)/eur_prev)*100
+        if abs(cambio) > 0.5:
+            return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
+        
         return None
-    
-    if eur_prev == 0:
-        print(f"[{datetime.now()}] eur_prev es 0, evitando división por cero")
+    except Exception as e:
+        print(f"[{datetime.now()}] Error en detectar_manipulacion: {e}")
         return None
-    
-    cambio = ((eur - eur_prev)/eur_prev)*100
-    if abs(cambio) > 0.5:
-        return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
-    
-    return None
 
 # ================= NOTICIAS =================
 def obtener_noticias_relevantes():
@@ -105,8 +116,8 @@ def obtener_noticias_relevantes():
             keywords = ["FED","BCE","Trump","geopolítica","inflación","banco central","tensiones"]
             if any(k.lower() in (titulo_es+descripcion_es).lower() for k in keywords):
                 noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}\n")
-    except:
-        pass
+    except Exception as e:
+        print(f"[{datetime.now()}] Error obteniendo noticias: {e}")
     return noticias
 
 # ================= CONSTRUIR MENSAJE =================
@@ -175,6 +186,4 @@ enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram func
 # Envío inicial de alertas
 enviar_si_hay_alerta()
 
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+while
