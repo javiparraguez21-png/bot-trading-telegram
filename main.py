@@ -66,12 +66,24 @@ def detectar_divergencia(datos):
     return None
 
 def detectar_manipulacion(datos):
+    """
+    Detecta cambios porcentuales y evita errores si datos faltan o previos son cero.
+    """
     eur = datos.get("EURUSD", {}).get("c")
     eur_prev = datos.get("EURUSD", {}).get("pc")
-    if all(isinstance(x,(int,float)) for x in [eur, eur_prev]):
-        cambio = ((eur - eur_prev)/eur_prev)*100
-        if abs(cambio) > 0.5:
-            return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
+    
+    if eur is None or eur_prev is None:
+        print(f"[{datetime.now()}] Datos incompletos para detectar manipulación")
+        return None
+    
+    if eur_prev == 0:
+        print(f"[{datetime.now()}] eur_prev es 0, evitando división por cero")
+        return None
+    
+    cambio = ((eur - eur_prev)/eur_prev)*100
+    if abs(cambio) > 0.5:
+        return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
+    
     return None
 
 # ================= NOTICIAS =================
