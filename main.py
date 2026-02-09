@@ -6,10 +6,12 @@ from datetime import datetime
 import pytz
 
 # ======= VARIABLES DE ENTORNO =======
-TELEGRAM_TOKEN = os.getenv(AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc)
-CHAT_ID = os.getenv(5933788259)
+# IMPORTANTE: Debes configurar estas variables en Railway (Settings -> Variables)
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-URL_TELEGRAM = f"https://api.telegram.org/bot{AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc}/sendMessage"
+# URL de Telegram
+URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # ======= FUNCIONES =======
 def enviar_reporte():
@@ -41,20 +43,20 @@ Plan:
         print(f"[{datetime.now()}] Error enviando mensaje: {e}")
 
 # ======= HORARIOS =======
-# Usa la zona horaria de Londres y NY
+# Zona horaria de Londres y NY
 london_tz = pytz.timezone('Europe/London')
 newyork_tz = pytz.timezone('America/New_York')
 
-# Antes de Londres: 30 min antes de apertura (07:00 AM hora Chile ≈ 11:00 GMT en invierno)
-schedule.every().day.at("10:30").do(enviar_reporte)  # Ajusta según horario real
+# Antes de Londres: 30 min antes de apertura (ajusta según tu horario real)
+schedule.every().day.at("10:30").do(enviar_reporte)  # ejemplo hora GMT
 
-# Durante Londres: cada 30 min (07:00-16:00 Chile / 11:00-20:00 GMT)
-for hour in range(11, 20):
+# Durante Londres: cada 30 min (ajusta según tu zona horaria)
+for hour in range(11, 20):  # 11:00 a 19:30 GMT
     schedule.every().day.at(f"{hour}:00").do(enviar_reporte)
     schedule.every().day.at(f"{hour}:30").do(enviar_reporte)
 
-# Durante New York: cada 30 min (09:30-16:00 NY)
-for hour in range(14, 21):  # Ajusta según diferencia horaria
+# Durante New York: cada 30 min (ajusta según tu zona horaria)
+for hour in range(14, 21):  # 14:00 a 20:30 GMT
     schedule.every().day.at(f"{hour}:00").do(enviar_reporte)
     schedule.every().day.at(f"{hour}:30").do(enviar_reporte)
 
@@ -65,5 +67,3 @@ enviar_reporte()  # envío inicial de prueba
 while True:
     schedule.run_pending()
     time.sleep(1)
-
-
