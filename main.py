@@ -5,28 +5,27 @@ import time
 from datetime import datetime
 from deep_translator import GoogleTranslator
 
-# ================= VARIABLES DE ENTORNO O DIRECTAS =================
-# Para Railway: usa las variables de entorno
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or "8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
-CHAT_ID = os.getenv("CHAT_ID") or "5933788259"
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY") or "d632dchr01qnpqnvhurgd632dchr01qnpqnvhus0"
-NEWS_API_KEY = os.getenv("NEWS_API_KEY") or "ea6acd4f9dca4de99fab812dc069a67b"
+# ================= VARIABLES =================
+# Telegram
+TELEGRAM_TOKEN = "8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
+CHAT_ID = "5933788259"
 
-URL_TELEGRAM = f"https://api.telegram.org/bot 8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc/sendMessage"
+# APIs
+FINNHUB_API_KEY = "d632dchr01qnpqnvhurgd632dchr01qnpqnvhus0"
+NEWS_API_KEY = "ea6acd4f9dca4de99fab812dc069a67b"
 
-# ================= DEBUG VARIABLES =================
+URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+# ================= DEBUG =================
 print("===== VERIFICANDO VARIABLES DE ENTORNO =====")
-print(f"TELEGRAM_TOKEN:"8142044386AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
-print(f"CHAT_ID:"5933788259"
-print(f"FINNHUB_API_KEY:"d632dchr01qnpqnvhurgd632dchr01qnpqnvhus0"
-print(f"NEWS_API_KEY:"ea6acd4f9dca4de99fab812dc069a67b"
+print(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")
+print(f"CHAT_ID: {CHAT_ID}")
+print(f"FINNHUB_API_KEY: {FINNHUB_API_KEY}")
+print(f"NEWS_API_KEY: {NEWS_API_KEY}")
 print("===========================================")
 
 # ================= FUNCIONES =================
 def enviar_mensaje_telegram(texto):
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("❌ Faltan TELEGRAM_TOKEN o CHAT_ID")
-        return
     try:
         r = requests.post(URL_TELEGRAM, data={
             "chat_id": CHAT_ID,
@@ -53,7 +52,7 @@ def obtener_datos_macro():
             datos[t] = {"c": None, "pc": None}
     return datos
 
-# ================= DETECCIÓN DE ALERTAS =================
+# ================= DETECCIÓN =================
 def detectar_divergencia(datos):
     eur = datos.get("EURUSD", {}).get("c")
     dxy = datos.get("DXY", {}).get("c")
@@ -75,7 +74,7 @@ def detectar_manipulacion(datos):
             return f"⚠️ Posible manipulación de Londres ({cambio:.2f}%)"
     return None
 
-# ================= NOTICIAS RELEVANTES =================
+# ================= NOTICIAS =================
 def obtener_noticias_relevantes():
     noticias = []
     url = f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
@@ -158,13 +157,12 @@ for hour in range(14,21):
 # ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 
-# ⚡ Mensaje de prueba inmediato al iniciar
+# Mensaje de prueba al iniciar
 enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram funciona.")
 
-# Envío inicial de alertas reales
+# Envío inicial de alertas
 enviar_si_hay_alerta()
 
 while True:
     schedule.run_pending()
     time.sleep(1)
-
