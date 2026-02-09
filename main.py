@@ -9,7 +9,7 @@ import pytz
 TELEGRAM_TOKEN = os.getenv(8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc)
 CHAT_ID = os.getenv(5933788259)
 
-URL_TELEGRAM = f"https://api.telegram.org/bot{8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc}/sendMessage"
+URL_TELEGRAM = f"https://api.telegram.org/bot{AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc}/sendMessage"
 
 # ======= FUNCIONES =======
 def enviar_reporte():
@@ -65,3 +65,4 @@ enviar_reporte()  # envío inicial de prueba
 while True:
     schedule.run_pending()
     time.sleep(1)
+
