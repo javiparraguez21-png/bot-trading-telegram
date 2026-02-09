@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 
 # ======= VARIABLES DE ENTORNO =======
-TELEGRAM_TOKEN = os.getenv(8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc)
+TELEGRAM_TOKEN = os.getenv(AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc)
 CHAT_ID = os.getenv(5933788259)
 
 URL_TELEGRAM = f"https://api.telegram.org/bot{AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc}/sendMessage"
@@ -65,4 +65,5 @@ enviar_reporte()  # envío inicial de prueba
 while True:
     schedule.run_pending()
     time.sleep(1)
+
 
