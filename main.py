@@ -115,10 +115,10 @@ else:
     if noticias:
         alertas.append(f"*Últimas noticias relevantes:*\n" + "\n".join(noticias))
     
-    if not alertas:
-        return None  # no hay alertas, no envía mensaje
-    
-    mensaje = f"""
+   if not alertas:
+    return None  # no hay alertas, no envía mensaje
+
+mensaje = f"""
 📊 *MAESTRO ANALISTA IA – ALERTAS MACRO*
 
 EURUSD: {datos.get('EURUSD')}
@@ -129,8 +129,9 @@ VIX: {vix} ({vix_texto})
 
 *Alertas:*
 """ + "\n".join(alertas)
-    
-    return mensaje
+
+return mensaje
+
 
 # ================= HORARIOS =================
 # Pre-market Londres
@@ -162,4 +163,5 @@ enviar_si_hay_alerta()  # envío inicial al iniciar
 while True:
     schedule.run_pending()
     time.sleep(1)
+
 
