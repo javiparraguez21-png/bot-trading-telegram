@@ -11,7 +11,11 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
-URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+# ======= MINI LOG DE VERIFICACIÓN =======
+print("===== VERIFICANDO VARIABLES DE ENTORNO =====")
+print(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")
+print(f"CHAT_ID: {CHAT_ID}")
+print("===========================================")
 
 # ================= FUNCIONES =================
 def enviar_mensaje_telegram(texto):
@@ -171,3 +175,4 @@ enviar_si_hay_alerta()
 while True:
     schedule.run_pending()
     time.sleep(1)
+
