@@ -47,7 +47,6 @@ def obtener_datos_macro():
         try:
             r = requests.get(url)
             datos[t] = r.json()
-            # Asegurarnos que siempre tenga 'c' y 'pc'
             if "c" not in datos[t] or "pc" not in datos[t]:
                 datos[t] = {"c": None, "pc": None}
         except:
@@ -68,9 +67,6 @@ def detectar_divergencia(datos):
     return None
 
 def detectar_manipulacion(datos):
-    """
-    Detecta cambios porcentuales y evita errores si datos faltan o previos son cero.
-    """
     try:
         eur_data = datos.get("EURUSD", {})
         if not isinstance(eur_data, dict):
@@ -186,4 +182,6 @@ enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram func
 # Envío inicial de alertas
 enviar_si_hay_alerta()
 
-while
+while True:
+    schedule.run_pending()
+    time.sleep(1)
