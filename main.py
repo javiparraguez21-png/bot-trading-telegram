@@ -191,7 +191,22 @@ for seccion, horas in SECCIONES.items():
 # ========== LOOP PRINCIPAL ==========
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram funciona.")
+# ================= PRUEBA INMEDIATA =================
+# Esto envía un mensaje de prueba para confirmar que el bot y las alertas funcionan
+def prueba_alerta_inmediata():
+    print(f"[{datetime.now()}] Enviando alerta de prueba...")
+    # Puedes poner cualquier sección: "Tokio", "Londres", "Nueva York"
+    seccion_prueba = "Prueba"
+    mensaje = construir_mensaje_alertas(seccion=seccion_prueba)
+    if mensaje:
+        enviar_mensaje_telegram(mensaje)
+    else:
+        enviar_mensaje_telegram(f"[{datetime.now()}] ❌ No se generaron alertas en la prueba")
+
+# Llamada inmediata para testear
+prueba_alerta_inmediata()
 
 while True:
     schedule.run_pending()
     time.sleep(1)
+
