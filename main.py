@@ -1,15 +1,36 @@
+import requests
 import schedule
 import time
 from datetime import datetime
-from tradingview_ta import TA_Handler, Interval, Exchange
-import requests
 from deep_translator import GoogleTranslator
+from tradingview_ta import TA_Handler, Interval, Exchange
 import feedparser
 
 # ================= VARIABLES =================
 TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 CHAT_ID = "5933788259"
 URL_TELEGRAM = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+RSS_FEEDS = [
+    "https://www.economist.com/feeds/print-sections/77/geopolitics.xml",
+    "https://elpais.com/rss/elpais/internacional.xml",
+    "https://theconversation.com/us/topics/global/rss",
+    "https://www.cnbc.com/id/100727362/device/rss/rss.html"
+]
+
+ACTIVOS = {
+    "EURUSD": {"exchange":"FX", "symbol":"EURUSD"},
+    "GBPUSD": {"exchange":"FX", "symbol":"GBPUSD"},
+    "XAUUSD": {"exchange":"COMEX", "symbol":"XAUUSD"},
+    "DXY": {"exchange":"ICEUS", "symbol":"DXY"},
+    "VIX": {"exchange":"CBOE", "symbol":"VIX"}
+}
+
+SECCIONES = {
+    "Asia": {"inicio":"21:00","fin":"05:00"},
+    "Londres": {"inicio":"06:00","fin":"15:00"},
+    "Nueva York": {"inicio":"10:00","fin":"19:00"}
+}
 
 # ================= FUNCIONES =================
 def enviar_mensaje_telegram(texto):
@@ -26,50 +47,40 @@ def enviar_mensaje_telegram(texto):
     except Exception as e:
         print(f"[{datetime.now()}] Excepción al enviar mensaje: {e}")
 
-# ================= MERCADO TRADINGVIEW =================
-PAIRS = {
-    "EURUSD": {"symbol": "EURUSD", "exchange": "FX_IDC"},
-    "GBPUSD": {"symbol": "GBPUSD", "exchange": "FX_IDC"},
-    "XAUUSD": {"symbol": "XAUUSD", "exchange": "OANDA"},
-    "DXY": {"symbol": "DXY", "exchange": "ICEUS"},
-    "VIX": {"symbol": "VIX", "exchange": "CBOE"}
-}
-
-def obtener_datos_tradingview():
+def obtener_datos_activos():
     datos = {}
-    for par, info in PAIRS.items():
+    for nombre, info in ACTIVOS.items():
         try:
             handler = TA_Handler(
                 symbol=info["symbol"],
-                screener="forex" if par in ["EURUSD","GBPUSD"] else "commodities" if par=="XAUUSD" else "indices",
+                screener="forex" if info["exchange"]=="FX" else "crypto",
                 exchange=info["exchange"],
                 interval=Interval.INTERVAL_1_MINUTE
             )
-            analysis = handler.get_analysis()
-            datos[par] = {
-                "precio": analysis.indicators["close"],
-                "tendencia": analysis.summary["RECOMMENDATION"],  # BUY, STRONG_BUY, NEUTRAL, SELL, STRONG_SELL
-                "fuerza": analysis.indicators.get("RSI", None)  # RSI como fuerza relativa
+            res = handler.get_analysis()
+            precio = res.indicators.get("close")
+            fuerza = res.moving_averages.get("COMPUTE")
+            tendencia = res.summary["RECOMMENDATION"]
+            datos[nombre] = {
+                "precio": precio,
+                "fuerza": fuerza,
+                "tendencia": tendencia
             }
         except Exception as e:
-            print(f"[{datetime.now()}] Error obteniendo {par}: {e}")
-            datos[par] = {"precio": None, "tendencia": "❌ Datos insuficientes", "fuerza": None}
+            print(f"[{datetime.now()}] Error obteniendo {nombre}: {e}")
+            datos[nombre] = {
+                "precio": None,
+                "fuerza": None,
+                "tendencia": "❌ Datos insuficientes"
+            }
     return datos
 
-# ================= NOTICIAS =================
-RSS_FEEDS = [
-    "https://www.economist.com/feeds/print-sections/77/geopolitics.xml",
-    "https://elpais.com/rss/elpais/internacional.xml",
-    "https://theconversation.com/us/topics/global/rss",
-    "https://www.cnbc.com/id/100727362/device/rss/rss.html"
-]
-
-def obtener_noticias():
+def obtener_noticias_rss():
     noticias = []
     for feed in RSS_FEEDS:
         try:
             d = feedparser.parse(feed)
-            for entry in d.entries[:3]:
+            for entry in d.entries[:5]:
                 titulo = entry.get("title","")
                 descripcion = entry.get("summary","")
                 enlace = entry.get("link","")
@@ -79,57 +90,47 @@ def obtener_noticias():
                 except:
                     titulo_es = titulo
                     descripcion_es = descripcion
-                noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}")
-        except:
-            continue
+                noticias.append(f"📰 *{titulo_es}*\n{descripcion_es}\n🔗 {enlace}\n")
+        except Exception as e:
+            print(f"[{datetime.now()}] Error leyendo RSS {feed}: {e}")
     return noticias
 
-# ================= MENSAJE =================
-def construir_mensaje_alertas(seccion="General"):
-    datos = obtener_datos_tradingview()
-    noticias = obtener_noticias()
+def construir_mensaje_alerta(seccion):
+    datos = obtener_datos_activos()
+    noticias = obtener_noticias_rss()
     
     mensaje = f"🌐 *MAESTRO ANALISTA IA – ALERTAS MACRO* 🌐\n📍 Sección: {seccion}\n\n"
-    for par, info in datos.items():
-        precio = info["precio"]
+    
+    for activo, info in datos.items():
+        precio = info["precio"] if info["precio"] is not None else 0.0
         tendencia = info["tendencia"]
-        fuerza = info["fuerza"]
-        if precio is None:
-            precio_texto = "❌ Datos insuficientes"
-        else:
-            precio_texto = f"{precio:.4f}" if par not in ["XAUUSD"] else f"{precio:.2f}"
-        fuerza_texto = f" (RSI: {fuerza})" if fuerza else ""
-        mensaje += f"{par}: {precio_texto} – Tendencia: {tendencia}{fuerza_texto}\n"
+        mensaje += f"{activo}: {precio} ({tendencia})\n"
     
     if noticias:
-        mensaje += "\n*Últimas noticias relevantes:*\n" + "\n\n".join(noticias)
+        mensaje += "\n*Últimas noticias relevantes:*\n" + "\n".join(noticias[:5])
     
     return mensaje
 
 def enviar_alerta_seccion(seccion):
-    mensaje = construir_mensaje_alertas(seccion)
+    print(f"[{datetime.now()}] Enviando alerta sección {seccion}...")
+    mensaje = construir_mensaje_alerta(seccion)
     enviar_mensaje_telegram(mensaje)
-    print(f"[{datetime.now()}] Alerta enviada para {seccion}")
 
 # ================= HORARIOS =================
-SECCIONES = {
-    "Asia": {"pre_market": "21:30", "interval_minutes": 20},
-    "Londres": {"pre_market": "07:30", "interval_minutes": 20},
-    "Nueva York": {"pre_market": "09:30", "interval_minutes": 20}
-}
+def programar_alertas():
+    for seccion, horas in SECCIONES.items():
+        inicio_hora, _ = horas["inicio"].split(":")
+        for h in range(24):
+            # Cada 20 minutos dentro del horario
+            for minuto in [0,20,40]:
+                hora_str = f"{h:02d}:{minuto:02d}"
+                schedule.every().day.at(hora_str).do(enviar_alerta_seccion, seccion=seccion)
 
-for seccion, info in SECCIONES.items():
-    # Pre-market
-    schedule.every().day.at(info["pre_market"]).do(enviar_alerta_seccion, seccion)
-    # Durante mercado cada 20 minutos
-    for h in range(24):
-        for m in range(0, 60, info["interval_minutes"]):
-            hora_formato = f"{h:02d}:{m:02d}"
-            schedule.every().day.at(hora_formato).do(enviar_alerta_seccion, seccion)
-
-# ================= LOOP =================
+# ================= LOOP PRINCIPAL =================
 print("🤖 BOT MACRO ULTRA PRO CON ALERTAS 24/7")
 enviar_mensaje_telegram("✅ El bot se ha iniciado correctamente y Telegram funciona.")
+
+programar_alertas()
 
 while True:
     schedule.run_pending()
