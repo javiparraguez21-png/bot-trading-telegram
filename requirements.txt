@@ -1,5 +1,5 @@
 tradingview_ta==4.2.0
-schedule
-requests
-deep-translator
-feedparser
+schedule==1.2.0
+requests==2.31.0
+deep-translator==1.11.5
+feedparser==6.0.10
