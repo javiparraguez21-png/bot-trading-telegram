@@ -6,12 +6,12 @@ from tradingview_ta import TA_Handler, Interval
 import feedparser
 from deep_translator import GoogleTranslator
 
-# ================= TELEGRAM (TUS CREDENCIALES) =================
+# ================= TELEGRAM =================
 TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 CHAT_ID = "5933788259"
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-# ================= ACTIVOS (TRADINGVIEW FIX DEFINITIVO) =================
+# ================= ACTIVOS (TRADINGVIEW FIX) =================
 ACTIVOS = {
     "EURUSD": {"symbol": "EURUSD", "screener": "forex", "exchange": "FX_IDC"},
     "GBPUSD": {"symbol": "GBPUSD", "screener": "forex", "exchange": "FX_IDC"},
@@ -20,22 +20,22 @@ ACTIVOS = {
     "VIX": {"symbol": "VIX", "screener": "indices", "exchange": "CBOE"}
 }
 
-# ================= SESIONES (HORARIO CHILE 🇨🇱) =================
+# ================= SESIONES (CHILE 🇨🇱) =================
 SESIONES = {
     "Asia": (dtime(21, 0), dtime(5, 0)),
     "Londres": (dtime(4, 0), dtime(13, 0)),
     "Nueva York": (dtime(9, 0), dtime(18, 0))
 }
 
-# ================= ESTADO GLOBAL =================
+# ================= ESTADO =================
 ultimo_sesgo = None
 last_update_id = None
 
 # ================= TELEGRAM =================
-def enviar_mensaje(texto, botones=False):
+def enviar(msg, botones=False):
     payload = {
         "chat_id": CHAT_ID,
-        "text": texto,
+        "text": msg,
         "parse_mode": "Markdown"
     }
 
@@ -48,28 +48,40 @@ def enviar_mensaje(texto, botones=False):
 
     requests.post(f"{BASE_URL}/sendMessage", json=payload)
 
-# ================= DATOS DE MERCADO =================
+# ================= SESIÓN ACTUAL =================
+def sesion_actual():
+    ahora = datetime.now().time()
+    for nombre, (inicio, fin) in SESIONES.items():
+        if inicio < fin:
+            if inicio <= ahora <= fin:
+                return nombre
+        else:
+            if ahora >= inicio or ahora <= fin:
+                return nombre
+    return "Fuera de sesión"
+
+# ================= DATOS =================
 def obtener_datos():
     datos = {}
-    for activo, cfg in ACTIVOS.items():
+    for a, c in ACTIVOS.items():
         try:
-            handler = TA_Handler(
-                symbol=cfg["symbol"],
-                screener=cfg["screener"],
-                exchange=cfg["exchange"],
+            h = TA_Handler(
+                symbol=c["symbol"],
+                screener=c["screener"],
+                exchange=c["exchange"],
                 interval=Interval.INTERVAL_15_MINUTES
             )
-            a = handler.get_analysis()
-            datos[activo] = {
-                "precio": a.indicators["close"],
-                "tendencia": a.summary["RECOMMENDATION"],
-                "rsi": round(a.indicators["RSI"], 1)
+            r = h.get_analysis()
+            datos[a] = {
+                "precio": r.indicators["close"],
+                "tendencia": r.summary["RECOMMENDATION"],
+                "rsi": round(r.indicators["RSI"], 1)
             }
-        except Exception:
-            datos[activo] = None
+        except:
+            datos[a] = None
     return datos
 
-# ================= SESGO MACRO =================
+# ================= SESGO =================
 def calcular_sesgo(datos):
     sesgo = []
 
@@ -84,86 +96,98 @@ def calcular_sesgo(datos):
 
     return sesgo if sesgo else ["NEUTRAL"]
 
-# ================= NOTICIAS =================
-def obtener_noticias():
+# ================= MARKET SCORE =================
+def market_score(sesgo):
+    score = 50
+    if "USD_FUERTE" in sesgo:
+        score -= 10
+    if "RISK_OFF" in sesgo:
+        score -= 20
+    if "ORO_DEMANDA" in sesgo:
+        score -= 5
+    if sesgo == ["NEUTRAL"]:
+        score -= 5
+    return max(0, min(100, score))
+
+# ================= NOTICIAS (FILTRADAS) =================
+def noticias_alto_impacto():
+    keywords = ["fed", "inflation", "cpi", "rates", "dollar", "war", "oil"]
     feed = feedparser.parse("https://www.cnbc.com/id/100727362/device/rss/rss.html")
-    noticias = []
+    out = []
 
-    for e in feed.entries[:2]:
-        try:
-            titulo = GoogleTranslator(source="en", target="es").translate(e.title)
-        except:
-            titulo = e.title
-        noticias.append(f"📰 {titulo}")
+    for e in feed.entries:
+        titulo = e.title.lower()
+        if any(k in titulo for k in keywords):
+            try:
+                t = GoogleTranslator(source="en", target="es").translate(e.title)
+            except:
+                t = e.title
+            out.append(f"🔴 {t}")
+        if len(out) == 2:
+            break
 
-    return noticias
+    return out or ["🟢 Sin noticias macro críticas"]
+
+# ================= DECISIÓN =================
+def decision_operativa(score, sesion):
+    if sesion == "Fuera de sesión":
+        return "❌ *No operar – fuera de sesión*"
+    if score < 35:
+        return "❌ *Contexto desfavorable – proteger capital*"
+    if score < 60:
+        return "⚠️ *Solo setups A+ con confirmación*"
+    return "✅ *Contexto favorable para operar*"
 
 # ================= DASHBOARD =================
-def construir_dashboard(pre_market=False):
+def dashboard(pre=False):
     global ultimo_sesgo
 
     datos = obtener_datos()
-    sesgo_actual = calcular_sesgo(datos)
-    noticias = obtener_noticias()
+    sesgo = calcular_sesgo(datos)
+    score = market_score(sesgo)
+    news = noticias_alto_impacto()
+    sesion = sesion_actual()
 
-    mensaje = "📊 *DASHBOARD MACRO TRADING PRO*\n\n"
+    msg = "📊 *DASHBOARD MACRO TRADING PRO*\n\n"
 
-    for activo, d in datos.items():
+    for a, d in datos.items():
         if d:
-            mensaje += f"*{activo}*: {d['precio']} | {d['tendencia']} | RSI {d['rsi']}\n"
+            msg += f"*{a}*: {d['precio']} | {d['tendencia']} | RSI {d['rsi']}\n"
 
-    mensaje += "\n🧠 *Sesgo actual:*\n" + ", ".join(sesgo_actual)
+    msg += f"\n📍 *Sesión actual:* {sesion}"
+    msg += f"\n🧠 *Sesgo:* {', '.join(sesgo)}"
+    msg += f"\n📊 *Market Score:* {score}/100"
+    msg += f"\n\n🎯 *Decisión:* {decision_operativa(score, sesion)}"
 
-    if sesgo_actual != ultimo_sesgo:
-        mensaje += "\n\n🚨 *CAMBIO DE SESGO DETECTADO*"
-        ultimo_sesgo = sesgo_actual
+    if sesgo != ultimo_sesgo:
+        msg += "\n\n🚨 *CAMBIO DE SESGO DETECTADO*"
+        ultimo_sesgo = sesgo
 
-    if pre_market:
-        mensaje += "\n\n⏳ *PRE-MARKET CHECK*\n"
-        mensaje += "• Identificar activo dominante\n"
-        mensaje += "• Evitar entradas pre-noticia\n"
-        mensaje += "• Confirmar sesgo en M15 / H1\n"
+    msg += "\n\n📰 *Noticias macro:*\n" + "\n".join(news)
 
-    mensaje += "\n\n📰 *Noticias clave:*\n" + "\n".join(noticias)
+    return msg
 
-    return mensaje
-
-# ================= PRE-MARKET =================
-def enviar_pre_market():
-    enviar_mensaje(construir_dashboard(pre_market=True), botones=True)
-
-# ================= ACTUALIZACIÓN MANUAL (BOTÓN) =================
-def revisar_actualizaciones():
+# ================= MANUAL UPDATE =================
+def revisar_updates():
     global last_update_id
-
-    params = {"timeout": 1}
-    if last_update_id:
-        params["offset"] = last_update_id + 1
-
-    r = requests.get(f"{BASE_URL}/getUpdates", params=params).json()
-
-    if "result" in r:
-        for update in r["result"]:
-            last_update_id = update["update_id"]
-
-            if "callback_query" in update:
-                data = update["callback_query"]["data"]
-                if data == "update":
-                    enviar_mensaje(construir_dashboard(), botones=True)
+    r = requests.get(f"{BASE_URL}/getUpdates", params={"timeout": 1}).json()
+    for u in r.get("result", []):
+        last_update_id = u["update_id"]
+        if "callback_query" in u:
+            if u["callback_query"]["data"] == "update":
+                enviar(dashboard(), botones=True)
 
 # ================= SCHEDULE =================
-schedule.every().hour.at(":00").do(lambda: enviar_mensaje(construir_dashboard(), botones=True))
-
-# Pre-market sesiones (Chile)
-schedule.every().day.at("03:45").do(enviar_pre_market)  # Londres
-schedule.every().day.at("08:45").do(enviar_pre_market)  # NY
-schedule.every().day.at("20:45").do(enviar_pre_market)  # Asia
+schedule.every().hour.at(":00").do(lambda: enviar(dashboard(), botones=True))
+schedule.every().day.at("03:45").do(lambda: enviar(dashboard(pre=True), botones=True))
+schedule.every().day.at("08:45").do(lambda: enviar(dashboard(pre=True), botones=True))
+schedule.every().day.at("20:45").do(lambda: enviar(dashboard(pre=True), botones=True))
 
 # ================= START =================
-print("🤖 BOT MACRO TRADING PRO INICIADO")
-enviar_mensaje("✅ *Bot Macro Trading PRO activo*\nSesiones Chile 🇨🇱 sincronizadas", botones=True)
+enviar("✅ *Bot Macro Trading PRO activo*\nChile 🇨🇱 sincronizado", botones=True)
+print("BOT MACRO PRO INICIADO")
 
 while True:
     schedule.run_pending()
-    revisar_actualizaciones()
+    revisar_updates()
     time.sleep(2)
