@@ -1,6 +1,4 @@
-import requests
-import schedule
-import time
+import requests, schedule, time
 from datetime import datetime, time as dtime
 from tradingview_ta import TA_Handler, Interval
 import feedparser
@@ -11,181 +9,162 @@ TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 CHAT_ID = "5933788259"
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-# ================= ACTIVOS (TRADINGVIEW FIX) =================
+# ================= CONFIG =================
+RIESGO_POR_TRADE = 0.005   # 0.5%
+RR_MINIMO = 2
+
+# ================= ACTIVOS =================
 ACTIVOS = {
     "EURUSD": {"symbol": "EURUSD", "screener": "forex", "exchange": "FX_IDC"},
     "GBPUSD": {"symbol": "GBPUSD", "screener": "forex", "exchange": "FX_IDC"},
     "XAUUSD": {"symbol": "XAUUSD", "screener": "forex", "exchange": "FX_IDC"},
-    "DXY": {"symbol": "DXY", "screener": "indices", "exchange": "TVC"},
-    "VIX": {"symbol": "VIX", "screener": "indices", "exchange": "CBOE"}
 }
 
-# ================= SESIONES (CHILE 🇨🇱) =================
+# ================= SESIONES CHILE =================
 SESIONES = {
     "Asia": (dtime(21, 0), dtime(5, 0)),
     "Londres": (dtime(4, 0), dtime(13, 0)),
-    "Nueva York": (dtime(9, 0), dtime(18, 0))
+    "New York": (dtime(9, 0), dtime(18, 0))
 }
 
-# ================= ESTADO =================
-ultimo_sesgo = None
-last_update_id = None
+# ================= ESTADO GLOBAL =================
+last_update_id = 0
+rangos = {
+    "Asia": {},
+    "Londres": {}
+}
+alertas_enviadas = set()
 
 # ================= TELEGRAM =================
 def enviar(msg, botones=False):
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg,
-        "parse_mode": "Markdown"
-    }
-
+    payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     if botones:
         payload["reply_markup"] = {
-            "inline_keyboard": [[
-                {"text": "🔄 Actualizar ahora", "callback_data": "update"}
-            ]]
+            "inline_keyboard": [[{"text": "🔄 Actualizar", "callback_data": "update"}]]
         }
-
     requests.post(f"{BASE_URL}/sendMessage", json=payload)
 
-# ================= SESIÓN ACTUAL =================
+# ================= SESION =================
 def sesion_actual():
     ahora = datetime.now().time()
-    for nombre, (inicio, fin) in SESIONES.items():
-        if inicio < fin:
-            if inicio <= ahora <= fin:
-                return nombre
-        else:
-            if ahora >= inicio or ahora <= fin:
-                return nombre
-    return "Fuera de sesión"
+    for s, (i, f) in SESIONES.items():
+        if i < f and i <= ahora <= f: return s
+        if i > f and (ahora >= i or ahora <= f): return s
+    return "Fuera"
 
 # ================= DATOS =================
-def obtener_datos():
-    datos = {}
-    for a, c in ACTIVOS.items():
-        try:
-            h = TA_Handler(
-                symbol=c["symbol"],
-                screener=c["screener"],
-                exchange=c["exchange"],
-                interval=Interval.INTERVAL_15_MINUTES
-            )
-            r = h.get_analysis()
-            datos[a] = {
-                "precio": r.indicators["close"],
-                "tendencia": r.summary["RECOMMENDATION"],
-                "rsi": round(r.indicators["RSI"], 1)
-            }
-        except:
-            datos[a] = None
-    return datos
+def precio_actual(activo):
+    h = TA_Handler(**ACTIVOS[activo], interval=Interval.INTERVAL_5_MINUTES)
+    r = h.get_analysis()
+    return r.indicators["close"]
 
-# ================= SESGO =================
-def calcular_sesgo(datos):
-    sesgo = []
+# ================= AMD =================
+def detectar_amd():
+    sesion = sesion_actual()
 
-    if datos["DXY"] and datos["DXY"]["tendencia"] in ["BUY", "STRONG_BUY"]:
-        sesgo.append("USD_FUERTE")
+    for a in ACTIVOS:
+        p = precio_actual(a)
 
-    if datos["VIX"] and datos["VIX"]["tendencia"] in ["BUY", "STRONG_BUY"]:
-        sesgo.append("RISK_OFF")
+        if sesion == "Asia":
+            rangos["Asia"][a] = rangos["Asia"].get(a, {"h": p, "l": p})
+            rangos["Asia"][a]["h"] = max(rangos["Asia"][a]["h"], p)
+            rangos["Asia"][a]["l"] = min(rangos["Asia"][a]["l"], p)
 
-    if datos["XAUUSD"] and datos["XAUUSD"]["tendencia"] in ["BUY", "STRONG_BUY"]:
-        sesgo.append("ORO_DEMANDA")
+        if sesion == "Londres" and a in rangos["Asia"]:
+            h, l = rangos["Asia"][a]["h"], rangos["Asia"][a]["l"]
 
-    return sesgo if sesgo else ["NEUTRAL"]
+            if p > h and (a, "LON_MAX") not in alertas_enviadas:
+                alerta_amd(a, "Manipulación sobre máximo de Asia", p, h, "SELL")
+                alertas_enviadas.add((a, "LON_MAX"))
 
-# ================= MARKET SCORE =================
-def market_score(sesgo):
-    score = 50
-    if "USD_FUERTE" in sesgo:
-        score -= 10
-    if "RISK_OFF" in sesgo:
-        score -= 20
-    if "ORO_DEMANDA" in sesgo:
-        score -= 5
-    if sesgo == ["NEUTRAL"]:
-        score -= 5
-    return max(0, min(100, score))
+            if p < l and (a, "LON_MIN") not in alertas_enviadas:
+                alerta_amd(a, "Manipulación bajo mínimo de Asia", p, l, "BUY")
+                alertas_enviadas.add((a, "LON_MIN"))
 
-# ================= NOTICIAS (FILTRADAS) =================
-def noticias_alto_impacto():
-    keywords = ["fed", "inflation", "cpi", "rates", "dollar", "war", "oil"]
-    feed = feedparser.parse("https://www.cnbc.com/id/100727362/device/rss/rss.html")
+        if sesion == "New York" and a in rangos["Londres"]:
+            h, l = rangos["Londres"][a]["h"], rangos["Londres"][a]["l"]
+
+            if p > h and (a, "NY_MAX") not in alertas_enviadas:
+                alerta_amd(a, "Manipulación sobre máximo de Londres", p, h, "SELL")
+                alertas_enviadas.add((a, "NY_MAX"))
+
+            if p < l and (a, "NY_MIN") not in alertas_enviadas:
+                alerta_amd(a, "Manipulación bajo mínimo de Londres", p, l, "BUY")
+                alertas_enviadas.add((a, "NY_MIN"))
+
+# ================= ALERTA =================
+def alerta_amd(activo, texto, precio, nivel, direccion):
+    sl = abs(precio - nivel)
+    tp = round(precio + sl * RR_MINIMO if direccion == "BUY" else precio - sl * RR_MINIMO, 2)
+
+    enviar(
+        f"🚨 *ALERTA AMD – {activo}*\n"
+        f"{texto}\n\n"
+        f"📍 Precio: {precio}\n"
+        f"🛑 SL técnico: {nivel}\n"
+        f"🎯 TP estimado: {tp}\n\n"
+        f"⚖️ Riesgo: {RIESGO_POR_TRADE*100}%\n"
+        f"📐 RR: 1:{RR_MINIMO}\n"
+        "_Modelo AMD: Liquidez → Reversión institucional_"
+    )
+
+# ================= NOTICIAS =================
+def noticias():
+    feeds = [
+        "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+        "https://www.reuters.com/rssFeed/worldNews",
+        "https://www.aljazeera.com/xml/rss/all.xml"
+    ]
     out = []
-
-    for e in feed.entries:
-        titulo = e.title.lower()
-        if any(k in titulo for k in keywords):
+    for f in feeds:
+        feed = feedparser.parse(f)
+        for e in feed.entries[:2]:
             try:
                 t = GoogleTranslator(source="en", target="es").translate(e.title)
             except:
                 t = e.title
-            out.append(f"🔴 {t}")
-        if len(out) == 2:
-            break
-
-    return out or ["🟢 Sin noticias macro críticas"]
-
-# ================= DECISIÓN =================
-def decision_operativa(score, sesion):
-    if sesion == "Fuera de sesión":
-        return "❌ *No operar – fuera de sesión*"
-    if score < 35:
-        return "❌ *Contexto desfavorable – proteger capital*"
-    if score < 60:
-        return "⚠️ *Solo setups A+ con confirmación*"
-    return "✅ *Contexto favorable para operar*"
+            out.append(f"📰 {t}")
+    return out[:4]
 
 # ================= DASHBOARD =================
-def dashboard(pre=False):
-    global ultimo_sesgo
+def dashboard():
+    return (
+        "📊 *AMD SMART BOT – ESTADO GENERAL*\n"
+        f"🕒 {datetime.utcnow().strftime('%d/%m %H:%M UTC')}\n"
+        f"📍 Sesión actual: {sesion_actual()}\n\n"
+        "🧠 *Modelo AMD activo*\n"
+        "🔔 Alertas solo en manipulación real\n\n"
+        "📰 *Noticias clave:*\n" +
+        "\n".join(noticias())
+    )
 
-    datos = obtener_datos()
-    sesgo = calcular_sesgo(datos)
-    score = market_score(sesgo)
-    news = noticias_alto_impacto()
-    sesion = sesion_actual()
-
-    msg = "📊 *DASHBOARD MACRO TRADING PRO*\n\n"
-
-    for a, d in datos.items():
-        if d:
-            msg += f"*{a}*: {d['precio']} | {d['tendencia']} | RSI {d['rsi']}\n"
-
-    msg += f"\n📍 *Sesión actual:* {sesion}"
-    msg += f"\n🧠 *Sesgo:* {', '.join(sesgo)}"
-    msg += f"\n📊 *Market Score:* {score}/100"
-    msg += f"\n\n🎯 *Decisión:* {decision_operativa(score, sesion)}"
-
-    if sesgo != ultimo_sesgo:
-        msg += "\n\n🚨 *CAMBIO DE SESGO DETECTADO*"
-        ultimo_sesgo = sesgo
-
-    msg += "\n\n📰 *Noticias macro:*\n" + "\n".join(news)
-
-    return msg
-
-# ================= MANUAL UPDATE =================
+# ================= UPDATES =================
 def revisar_updates():
     global last_update_id
-    r = requests.get(f"{BASE_URL}/getUpdates", params={"timeout": 1}).json()
+    r = requests.get(
+        f"{BASE_URL}/getUpdates",
+        params={"timeout": 1, "offset": last_update_id + 1}
+    ).json()
+
     for u in r.get("result", []):
         last_update_id = u["update_id"]
-        if "callback_query" in u:
-            if u["callback_query"]["data"] == "update":
+
+        if "message" in u and u["message"].get("text"):
+            cmd = u["message"]["text"]
+            if cmd == "/estado":
+                enviar(dashboard())
+            if cmd == "/actualizar":
                 enviar(dashboard(), botones=True)
 
+        if "callback_query" in u:
+            enviar(dashboard(), botones=True)
+
 # ================= SCHEDULE =================
-schedule.every().hour.at(":00").do(lambda: enviar(dashboard(), botones=True))
-schedule.every().day.at("03:45").do(lambda: enviar(dashboard(pre=True), botones=True))
-schedule.every().day.at("08:45").do(lambda: enviar(dashboard(pre=True), botones=True))
-schedule.every().day.at("20:45").do(lambda: enviar(dashboard(pre=True), botones=True))
+schedule.every(20).minutes.do(lambda: enviar(dashboard(), botones=True))
+schedule.every(2).minutes.do(detectar_amd)
 
 # ================= START =================
-enviar("✅ *Bot Macro Trading PRO activo*\nChile 🇨🇱 sincronizado", botones=True)
-print("BOT MACRO PRO INICIADO")
+enviar("✅ *AMD SMART BOT activo*\nChile 🇨🇱 sincronizado", botones=True)
 
 while True:
     schedule.run_pending()
