@@ -22,14 +22,13 @@ ACTIVOS = {
     "VIX": {"symbol": "VIX", "screener": "cfd", "exchange": "TVC"},
 }
 
-# ================= TIMEFRAMES =================
+# ================= TIMEFRAMES (CORREGIDO) =================
 TIMEFRAMES = {
     "D1": Interval.INTERVAL_1_DAY,
     "H4": Interval.INTERVAL_4_HOURS,
     "H1": Interval.INTERVAL_1_HOUR,
     "M15": Interval.INTERVAL_15_MINUTES,
     "M5": Interval.INTERVAL_5_MINUTES,
-    "M3": Interval.INTERVAL_3_MINUTES,
     "M1": Interval.INTERVAL_1_MINUTE,
 }
 
