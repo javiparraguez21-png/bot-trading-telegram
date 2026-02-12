@@ -1,5 +1,6 @@
-tradingview_ta
+tradingview_ta==3.3.0
 schedule
 requests
 deep-translator
 feedparser
+gunicorn
