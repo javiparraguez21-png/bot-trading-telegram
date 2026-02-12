@@ -1,5 +1,6 @@
 import requests, schedule, time
 from datetime import datetime, time as dtime
+from zoneinfo import ZoneInfo
 from tradingview_ta import TA_Handler, Interval
 import feedparser
 from deep_translator import GoogleTranslator
@@ -8,7 +9,6 @@ from deep_translator import GoogleTranslator
 TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
 CHAT_ID = "5933788259"
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
-
 # ================= CONFIG =================
 RIESGO_POR_TRADE = 0.005
 RR_MINIMO = 2
@@ -22,7 +22,7 @@ ACTIVOS = {
     "VIX": {"symbol": "VIX", "screener": "cfd", "exchange": "TVC"},
 }
 
-# ================= TIMEFRAMES (CORREGIDO) =================
+# ================= TIMEFRAMES =================
 TIMEFRAMES = {
     "D1": Interval.INTERVAL_1_DAY,
     "H4": Interval.INTERVAL_4_HOURS,
@@ -32,7 +32,7 @@ TIMEFRAMES = {
     "M1": Interval.INTERVAL_1_MINUTE,
 }
 
-# ================= SESIONES CHILE =================
+# ================= SESIONES (HORA CHILE) =================
 SESIONES = {
     "Asia": (dtime(21, 0), dtime(5, 0)),
     "Londres": (dtime(4, 0), dtime(13, 0)),
@@ -55,9 +55,9 @@ def enviar(msg, botones=False):
     except:
         pass
 
-# ================= SESION =================
+# ================= SESION ACTUAL (CHILE REAL) =================
 def sesion_actual():
-    ahora = datetime.now().time()
+    ahora = datetime.now(ZoneInfo("America/Santiago")).time()
     for s, (i, f) in SESIONES.items():
         if i < f and i <= ahora <= f:
             return s
@@ -141,7 +141,7 @@ def detectar_amd():
 
 # ================= DASHBOARD =================
 def dashboard():
-    ahora = datetime.utcnow().strftime("%d/%m/%Y | %H:%M UTC")
+    ahora = datetime.now(ZoneInfo("America/Santiago")).strftime("%d/%m/%Y | %H:%M 🇨🇱")
 
     msg = (
         "📊 *MAESTRO ANALISTA IA – MARKET SENTIMENT*\n"
@@ -207,7 +207,7 @@ schedule.every(20).minutes.do(lambda: enviar(dashboard(), botones=True))
 schedule.every(2).minutes.do(detectar_amd)
 
 # ================= START =================
-enviar("✅ *AMD SMART BOT PRO activo*\nChile 🇨🇱 sincronizado", botones=True)
+enviar("✅ *AMD SMART BOT PRO activo*\nChile 🇨🇱 sincronizado correctamente", botones=True)
 
 while True:
     schedule.run_pending()
