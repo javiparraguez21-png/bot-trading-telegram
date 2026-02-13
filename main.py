@@ -1,7 +1,7 @@
 import requests
 import schedule
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 from zoneinfo import ZoneInfo
 from tradingview_ta import TA_Handler, Interval
 import feedparser
@@ -9,14 +9,15 @@ from deep_translator import GoogleTranslator
 from bs4 import BeautifulSoup
 
 # ================= TELEGRAM =================
-TELEGRAM_TOKEN = "8142044386:AAFInOnDRJgUiWkRuDPeGnWhPJcvsF29IOc"
-CHAT_ID = "5933788259"
+TELEGRAM_TOKEN = "TU_TOKEN_NUEVO_AQUI"
+CHAT_ID = "TU_CHAT_ID_AQUI"
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 eventos_notificados = set()
 rangos = {"Asia": {}, "Londres": {}}
 alertas_enviadas = set()
+last_update_id = 0  # <- Inicializamos aquí
 
 # ================= CONFIG =================
 RIESGO_POR_TRADE = 0.005
@@ -132,8 +133,7 @@ def obtener_eventos_ff():
         imp = row.find("td",class_="calendar__impact")
         if not imp or not imp.img: continue
         impacto = imp.img["title"]
-        if impacto not in ["Medium Impact Expected","High Impact Expected"]:
-            continue
+        if impacto not in ["Medium Impact Expected","High Impact Expected"]: continue
         hora = row.find("td",class_="calendar__time").get_text(strip=True)
         moneda = row.find("td",class_="calendar__currency").get_text(strip=True)
         evento = row.find("td",class_="calendar__event").get_text(strip=True)
